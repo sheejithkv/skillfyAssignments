@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wine-quality-config
+  labels:
+    app: wine-quality-api
+
+data:
+  PYTHONUNBUFFERED: "1"
+  MLFLOW_TRACKING_URI: "/app/mlruns"
+  MODEL_NAME: "wine-quality-model"
+  MODEL_ALIAS: "champion"
+  LOG_LEVEL: "INFO"
