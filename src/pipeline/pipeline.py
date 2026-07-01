@@ -9,7 +9,9 @@ logger = get_logger(__name__)
 
 def run_pipeline():
 
-    logger.info("========== PIPELINE STARTED ==========")
+    logger.info("=" * 80)
+    logger.info("PIPELINE STARTED")
+    logger.info("=" * 80)
 
     preprocess()
 
@@ -17,7 +19,9 @@ def run_pipeline():
 
     metrics = evaluate_model()
 
-    logger.info("========== PIPELINE COMPLETED ==========")
+    logger.info("=" * 80)
+    logger.info("PIPELINE COMPLETED")
+    logger.info("=" * 80)
 
     return metrics
 

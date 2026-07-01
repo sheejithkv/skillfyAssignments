@@ -1,86 +1,156 @@
-import pandas as pd
+"""
+Data Preprocessing Module
 
+Responsibilities
+----------------
+1. Load raw dataset using DataIngestion
+2. Validate dataset
+3. Perform basic preprocessing
+4. Split train/test dataset
+5. Save processed datasets
+
+Author: Sheejith
+"""
+
+from pathlib import Path
+
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from src.config import (
-    RAW_DATA,
-    TRAIN_DATA,
-    TEST_DATA,
-    PROCESSED_DIR,
-    TARGET_COLUMN,
-    TEST_SIZE,
-    RANDOM_STATE,
+from src.config import Config
+from src.data.ingest import DataIngestion
+
+from src.utils.logger import logger
+from src.utils.common import (
+    create_directory,
+    save_csv,
 )
 
-from src.utils.common import create_directory
-from src.utils.logger import get_logger
-
-logger = get_logger(__name__)
-
-
-def load_dataset():
-
-    logger.info("Loading dataset")
-
-    df = pd.read_csv(RAW_DATA, sep=";")
-
-    logger.info("Dataset shape: %s", df.shape)
-
-    return df
+from src.utils.exceptions import (
+    PreprocessingException,
+    handle_exceptions,
+)
 
 
-def validate_dataset(df):
+class DataPreprocessor:
+    """
+    Data preprocessing pipeline.
+    """
 
-    logger.info("Validating dataset")
+    def __init__(self):
 
-    if df.empty:
-        raise Exception("Dataset is empty")
+        self.ingestion = DataIngestion()
 
-    if TARGET_COLUMN not in df.columns:
-        raise Exception("Target column missing")
+        create_directory(Config.PROCESSED_DATA_DIR)
 
-    if df.isnull().sum().sum() > 0:
-        raise Exception("Dataset contains null values")
+    @handle_exceptions
+    def preprocess(self):
+        """
+        Complete preprocessing pipeline.
+        """
 
-    logger.info("Validation successful")
+        logger.info("=" * 70)
+        logger.info("Starting Data Preprocessing")
+        logger.info("=" * 70)
 
+        # ---------------------------------------------------
+        # Load dataset
+        # ---------------------------------------------------
 
-def split_dataset(df):
+        df = self.ingestion.ingest()
 
-    logger.info("Splitting dataset")
+        logger.info(
+            "Dataset loaded successfully. Shape=%s",
+            df.shape,
+        )
 
-    train_df, test_df = train_test_split(
-        df,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_STATE,
-        stratify=df[TARGET_COLUMN],
-    )
+        # ---------------------------------------------------
+        # Remove duplicate rows
+        # ---------------------------------------------------
 
-    return train_df, test_df
+        duplicate_rows = df.duplicated().sum()
 
+        if duplicate_rows > 0:
+            logger.warning(
+                "Removing %d duplicate rows.",
+                duplicate_rows,
+            )
 
-def save_dataset(train_df, test_df):
+            df = df.drop_duplicates()
 
-    create_directory(PROCESSED_DIR)
+        # ---------------------------------------------------
+        # Missing values
+        # ---------------------------------------------------
 
-    train_df.to_csv(TRAIN_DATA, index=False)
+        missing = df.isnull().sum().sum()
 
-    test_df.to_csv(TEST_DATA, index=False)
+        if missing > 0:
+            raise PreprocessingException(
+                f"Dataset contains {missing} missing values."
+            )
 
-    logger.info("Processed dataset saved")
+        logger.info("No missing values detected.")
+
+        # ---------------------------------------------------
+        # Train Test Split
+        # ---------------------------------------------------
+
+        train_df, test_df = train_test_split(
+            df,
+            test_size=Config.TEST_SIZE,
+            random_state=Config.RANDOM_STATE,
+            stratify=df[Config.TARGET_COLUMN],
+        )
+
+        logger.info(
+            "Train Shape : %s",
+            train_df.shape,
+        )
+
+        logger.info(
+            "Test Shape : %s",
+            test_df.shape,
+        )
+
+        # ---------------------------------------------------
+        # Save processed data
+        # ---------------------------------------------------
+
+        save_csv(
+            train_df,
+            Config.TRAIN_DATA_FILE,
+        )
+
+        save_csv(
+            test_df,
+            Config.TEST_DATA_FILE,
+        )
+
+        logger.info(
+            "Train dataset saved to %s",
+            Config.TRAIN_DATA_FILE,
+        )
+
+        logger.info(
+            "Test dataset saved to %s",
+            Config.TEST_DATA_FILE,
+        )
+
+        logger.info("=" * 70)
+        logger.info("Preprocessing completed successfully")
+        logger.info("=" * 70)
+
+        return train_df, test_df
 
 
 def preprocess():
+    """
+    Functional interface.
+    """
 
-    df = load_dataset()
+    processor = DataPreprocessor()
 
-    validate_dataset(df)
-
-    train_df, test_df = split_dataset(df)
-
-    save_dataset(train_df, test_df)
-
-    logger.info("Preprocessing completed")
+    return processor.preprocess()
 
 
 if __name__ == "__main__":

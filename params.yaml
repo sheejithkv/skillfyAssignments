@@ -1,13 +1,46 @@
 dataset:
   path: data/raw/winequality-red.csv
+  separator: ";"
+  target_column: quality
+
+preprocessing:
+  remove_duplicates: true
+  validate_missing_values: true
+
+split:
+  test_size: 0.20
+  random_state: 42
+  stratify: true
 
 model:
-  random_state: 42
-  test_size: 0.2
+  algorithm: RandomForestRegressor
+
+  random_forest:
+    n_estimators: 200
+    max_depth: 15
+    min_samples_split: 2
+    min_samples_leaf: 1
+    random_state: 42
 
 training:
   experiment_name: wine-quality
   registered_model_name: wine-quality-model
 
+mlflow:
+  tracking_uri: mlruns
+
 optuna:
   n_trials: 20
+  direction: maximize
+
+evaluation:
+  metrics:
+    - r2
+    - rmse
+    - mae
+    - mse
+
+artifacts:
+  model_dir: artifacts/models
+  metrics_dir: artifacts/metrics
+  reports_dir: artifacts/reports

@@ -1,1 +1,43 @@
-stages: {}
+stages:
+
+  preprocess:
+
+    cmd: python -m src.data.preprocess
+
+    deps:
+      - src/data/preprocess.py
+      - src/data/ingest.py
+      - src/data/validate.py
+      - src/data/split.py
+      - src/config.py
+      - params.yaml
+      - data/raw/winequality-red.csv
+
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train:
+
+    cmd: python -m src.models.train
+
+    deps:
+      - src/models/train.py
+      - data/processed/train.csv
+      - params.yaml
+
+    outs:
+      - artifacts/models/model.pkl
+
+  evaluate:
+
+    cmd: python -m src.models.evaluate
+
+    deps:
+      - src/models/evaluate.py
+      - artifacts/models/model.pkl
+      - data/processed/test.csv
+      - params.yaml
+
+    metrics:
+      - artifacts/metrics/metrics.json
