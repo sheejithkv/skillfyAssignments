@@ -1,247 +1,160 @@
 """
-Model evaluation module.
-
-Responsibilities
-----------------
-1. Load trained model
-2. Load test dataset
-3. Predict on test data
-4. Calculate evaluation metrics
-5. Generate confusion matrix
-6. Save classification report
-7. Log metrics and artifacts to MLflow
+Model Evaluation Module for Wine Quality MLOps Project.
 """
 
+import json
+from pathlib import Path
+
 import joblib
-import matplotlib.pyplot as plt
 import mlflow
 import pandas as pd
-
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-    classification_report,
-)
+import yaml
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import numpy as np
 
 from src.config import (
+    PROJECT_ROOT,
     TEST_DATA,
-    TARGET_COLUMN,
     MODEL_FILE,
-    ARTIFACT_DIR,
-    CONFUSION_MATRIX_FILE,
-    CLASSIFICATION_REPORT_FILE,
+    METRICS_FILE,
+    METRICS_DIR,
+    ARTIFACTS_DIR,
+    TARGET_COLUMN,
 )
 
-from src.utils.common import create_directory
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+PARAMS_FILE = PROJECT_ROOT / "params.yaml"
+REPORTS_DIR = ARTIFACTS_DIR / "reports"
+PREDICTIONS_FILE = REPORTS_DIR / "predictions.csv"
 
-class ModelEvaluator:
-    """
-    Evaluate trained model.
-    """
 
-    def __init__(self):
+def load_params() -> dict:
+    if not PARAMS_FILE.exists():
+        raise FileNotFoundError(f"params.yaml not found: {PARAMS_FILE}")
 
-        create_directory(ARTIFACT_DIR)
+    with open(PARAMS_FILE, "r", encoding="utf-8") as file:
+        return yaml.safe_load(file)
 
-    def load_test_data(self):
-        """
-        Load processed test dataset.
-        """
 
-        logger.info("Loading test dataset...")
-
-        df = pd.read_csv(TEST_DATA)
-
-        logger.info("Test dataset shape: %s", df.shape)
-
-        X = df.drop(columns=[TARGET_COLUMN])
-
-        y = df[TARGET_COLUMN]
-
-        return X, y
-
-    def load_model(self):
-        """
-        Load trained Random Forest model.
-        """
-
-        logger.info("Loading trained model...")
-
-        model = joblib.load(MODEL_FILE)
-
-        return model
-
-    def evaluate(self):
-
-        X_test, y_test = self.load_test_data()
-
-        model = self.load_model()
-
-        logger.info("Running predictions...")
-
-        predictions = model.predict(X_test)
-
-        metrics = self.calculate_metrics(
-            y_test,
-            predictions,
+def load_test_data() -> pd.DataFrame:
+    if not TEST_DATA.exists():
+        raise FileNotFoundError(
+            f"Test data not found: {TEST_DATA}. Run preprocessing first."
         )
 
-        self.save_classification_report(
-            y_test,
-            predictions,
+    df = pd.read_csv(TEST_DATA)
+
+    if df.empty:
+        raise ValueError("Test dataset is empty.")
+
+    if TARGET_COLUMN not in df.columns:
+        raise ValueError(f"Target column '{TARGET_COLUMN}' not found in test data.")
+
+    return df
+
+
+def load_model():
+    if not MODEL_FILE.exists():
+        raise FileNotFoundError(
+            f"Model file not found: {MODEL_FILE}. Run training first."
         )
 
-        self.save_confusion_matrix(
-            y_test,
-            predictions,
-        )
+    model = joblib.load(MODEL_FILE)
 
-        self.log_mlflow(metrics)
+    logger.info("Model loaded from %s", MODEL_FILE)
 
-        logger.info("Evaluation completed.")
-
-        return metrics
-
-    def calculate_metrics(self, y_true, y_pred):
-        """
-        Calculate evaluation metrics.
-        """
-
-        metrics = {
-            "accuracy": accuracy_score(
-                y_true,
-                y_pred,
-            ),
-            "precision": precision_score(
-                y_true,
-                y_pred,
-                average="weighted",
-                zero_division=0,
-            ),
-            "recall": recall_score(
-                y_true,
-                y_pred,
-                average="weighted",
-                zero_division=0,
-            ),
-            "f1_score": f1_score(
-                y_true,
-                y_pred,
-                average="weighted",
-                zero_division=0,
-            ),
-        }
-
-        logger.info("Evaluation Metrics")
-
-        for key, value in metrics.items():
-            logger.info("%s : %.4f", key, value)
-
-        return metrics
-
-    def save_classification_report(
-        self,
-        y_true,
-        y_pred,
-    ):
-        """
-        Save classification report.
-        """
-
-        report = classification_report(
-            y_true,
-            y_pred,
-            zero_division=0,
-        )
-
-        with open(
-            CLASSIFICATION_REPORT_FILE,
-            "w",
-        ) as file:
-            file.write(report)
-
-        logger.info(
-            "Classification report saved -> %s",
-            CLASSIFICATION_REPORT_FILE,
-        )
-
-    def save_confusion_matrix(
-        self,
-        y_true,
-        y_pred,
-    ):
-        """
-        Save confusion matrix.
-        """
-
-        cm = confusion_matrix(
-            y_true,
-            y_pred,
-        )
-
-        disp = ConfusionMatrixDisplay(
-            confusion_matrix=cm,
-        )
-
-        plt.figure(figsize=(8, 6))
-
-        disp.plot(cmap="Blues")
-
-        plt.tight_layout()
-
-        plt.savefig(
-            CONFUSION_MATRIX_FILE,
-            dpi=150,
-        )
-
-        plt.close()
-
-        logger.info(
-            "Confusion matrix saved -> %s",
-            CONFUSION_MATRIX_FILE,
-        )
-
-    def log_mlflow(self, metrics):
-        """
-        Log metrics and artifacts.
-        """
-
-        mlflow.log_metrics(metrics)
-
-        mlflow.log_artifact(
-            CLASSIFICATION_REPORT_FILE
-        )
-
-        mlflow.log_artifact(
-            CONFUSION_MATRIX_FILE
-        )
-
-        logger.info("Metrics logged to MLflow.")
+    return model
 
 
-def evaluate_model():
-    """
-    Entry point for pipeline.
-    """
+def calculate_metrics(y_true, y_pred) -> dict:
+    mse = mean_squared_error(y_true, y_pred)
 
-    evaluator = ModelEvaluator()
+    metrics = {
+        "mae": float(mean_absolute_error(y_true, y_pred)),
+        "mse": float(mse),
+        "rmse": float(np.sqrt(mse)),
+        "r2_score": float(r2_score(y_true, y_pred)),
+    }
 
-    return evaluator.evaluate()
+    return metrics
+
+
+def save_metrics(metrics: dict) -> None:
+    METRICS_DIR.mkdir(parents=True, exist_ok=True)
+
+    with open(METRICS_FILE, "w", encoding="utf-8") as file:
+        json.dump(metrics, file, indent=4)
+
+    logger.info("Metrics saved to %s", METRICS_FILE)
+
+
+def save_predictions(test_df: pd.DataFrame, y_pred) -> None:
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    predictions_df = test_df.copy()
+    predictions_df["prediction"] = y_pred
+
+    predictions_df.to_csv(PREDICTIONS_FILE, index=False)
+
+    logger.info("Predictions saved to %s", PREDICTIONS_FILE)
+
+
+def log_metrics(metrics: dict) -> None:
+    logger.info("=" * 80)
+    logger.info("MODEL EVALUATION METRICS")
+    logger.info("=" * 80)
+
+    for key, value in metrics.items():
+        logger.info("%s: %.6f", key, value)
+
+    logger.info("=" * 80)
+
+
+def evaluate_model() -> dict:
+    logger.info("=" * 80)
+    logger.info("MODEL EVALUATION STARTED")
+    logger.info("=" * 80)
+
+    params = load_params()
+    df = load_test_data()
+    model = load_model()
+
+    X_test = df.drop(columns=[TARGET_COLUMN])
+    y_test = df[TARGET_COLUMN]
+
+    logger.info("Test data shape: %s", df.shape)
+    logger.info("Feature count: %d", X_test.shape[1])
+
+    y_pred = model.predict(X_test)
+
+    metrics = calculate_metrics(y_test, y_pred)
+
+    save_metrics(metrics)
+    save_predictions(df, y_pred)
+    log_metrics(metrics)
+
+    mlflow_tracking_uri = params.get("mlflow", {}).get("tracking_uri", "mlruns")
+    experiment_name = params.get("training", {}).get("experiment_name", "wine-quality")
+
+    mlflow.set_tracking_uri(str(PROJECT_ROOT / mlflow_tracking_uri))
+    mlflow.set_experiment(experiment_name)
+
+    with mlflow.start_run(run_name="random_forest_evaluation"):
+        for metric_name, metric_value in metrics.items():
+            mlflow.log_metric(metric_name, metric_value)
+
+        mlflow.log_artifact(str(METRICS_FILE))
+        mlflow.log_artifact(str(PREDICTIONS_FILE))
+
+    logger.info("=" * 80)
+    logger.info("MODEL EVALUATION COMPLETED")
+    logger.info("=" * 80)
+
+    return metrics
 
 
 if __name__ == "__main__":
-
-    metrics = evaluate_model()
-
-    print("\nFinal Metrics\n")
-
-    for key, value in metrics.items():
-        print(f"{key:15} : {value:.4f}")
+    evaluate_model()

@@ -12,8 +12,9 @@ Features
 from functools import wraps
 from typing import Callable, Any
 
-from src.utils.logger import logger
+from src.utils.logger import get_logger
 
+logger = get_logger(__name__)
 
 class MLOpsException(Exception):
     """

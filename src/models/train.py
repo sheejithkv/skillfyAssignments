@@ -1,210 +1,165 @@
 """
-Model training module.
-
-Responsibilities
-----------------
-1. Load processed training dataset
-2. Train Random Forest classifier
-3. Save trained model
-4. Generate feature importance plot
-5. Log everything to MLflow
+Model Training Module for Wine Quality MLOps Project.
 """
 
+import json
+from datetime import datetime
+from pathlib import Path
+
 import joblib
-import matplotlib.pyplot as plt
 import mlflow
 import mlflow.sklearn
 import pandas as pd
-
-from sklearn.ensemble import RandomForestClassifier
-from mlflow.models.signature import infer_signature
+import yaml
+from sklearn.ensemble import RandomForestRegressor
 
 from src.config import (
+    PROJECT_ROOT,
     TRAIN_DATA,
-    TARGET_COLUMN,
     MODEL_FILE,
-    MODEL_DIR,
-    ARTIFACT_DIR,
-    FEATURE_IMPORTANCE_FILE,
+    MODELS_DIR,
+    TARGET_COLUMN,
     RANDOM_STATE,
-    N_ESTIMATORS,
-    MAX_DEPTH,
-    MIN_SAMPLES_SPLIT,
-    MIN_SAMPLES_LEAF,
-    N_JOBS,
-    MLFLOW_MODEL_NAME,
 )
-
-from src.utils.common import create_directory
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+PARAMS_FILE = PROJECT_ROOT / "params.yaml"
+MODEL_METADATA_FILE = MODELS_DIR / "model_metadata.json"
+FEATURE_NAMES_FILE = MODELS_DIR / "feature_names.json"
 
-class ModelTrainer:
-    """
-    Train and save Random Forest model.
-    """
 
-    def __init__(self):
+def load_params() -> dict:
+    if not PARAMS_FILE.exists():
+        raise FileNotFoundError(f"params.yaml not found: {PARAMS_FILE}")
 
-        create_directory(MODEL_DIR)
-        create_directory(ARTIFACT_DIR)
+    with open(PARAMS_FILE, "r", encoding="utf-8") as file:
+        return yaml.safe_load(file)
 
-    def load_training_data(self):
-        """
-        Load processed training dataset.
-        """
 
-        logger.info("Loading training dataset...")
-
-        df = pd.read_csv(TRAIN_DATA)
-
-        logger.info("Training dataset shape: %s", df.shape)
-
-        X = df.drop(columns=[TARGET_COLUMN])
-
-        y = df[TARGET_COLUMN]
-
-        return X, y
-
-    def build_model(self):
-        """
-        Build Random Forest model.
-        """
-
-        logger.info("Building Random Forest model...")
-
-        model = RandomForestClassifier(
-            n_estimators=N_ESTIMATORS,
-            max_depth=MAX_DEPTH,
-            min_samples_split=MIN_SAMPLES_SPLIT,
-            min_samples_leaf=MIN_SAMPLES_LEAF,
-            random_state=RANDOM_STATE,
-            n_jobs=N_JOBS,
+def load_training_data() -> pd.DataFrame:
+    if not TRAIN_DATA.exists():
+        raise FileNotFoundError(
+            f"Training data not found: {TRAIN_DATA}. Run preprocessing first."
         )
 
-        return model
+    df = pd.read_csv(TRAIN_DATA)
 
-    def train(self):
+    if df.empty:
+        raise ValueError("Training dataset is empty.")
 
-        X_train, y_train = self.load_training_data()
+    if TARGET_COLUMN not in df.columns:
+        raise ValueError(f"Target column '{TARGET_COLUMN}' not found in training data.")
 
-        model = self.build_model()
+    return df
 
-        logger.info("Training started...")
 
-        model.fit(X_train, y_train)
+def build_model(params: dict) -> RandomForestRegressor:
+    rf_params = params.get("model", {}).get("random_forest", {})
 
-        logger.info("Training completed.")
+    model = RandomForestRegressor(
+        n_estimators=rf_params.get("n_estimators", 200),
+        max_depth=rf_params.get("max_depth", 15),
+        min_samples_split=rf_params.get("min_samples_split", 2),
+        min_samples_leaf=rf_params.get("min_samples_leaf", 1),
+        random_state=rf_params.get("random_state", RANDOM_STATE),
+        n_jobs=rf_params.get("n_jobs", -1),
+    )
 
-        joblib.dump(model, MODEL_FILE)
+    return model
 
-        logger.info("Model saved -> %s", MODEL_FILE)
 
-        self.plot_feature_importance(model, X_train)
+def save_training_artifacts(model, feature_names, params: dict) -> None:
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-        self.log_mlflow(model, X_train)
+    joblib.dump(model, MODEL_FILE)
 
-        return model
+    with open(FEATURE_NAMES_FILE, "w", encoding="utf-8") as file:
+        json.dump(feature_names, file, indent=4)
 
-    def plot_feature_importance(self, model, X_train):
-        """
-        Save feature importance graph.
-        """
+    metadata = {
+        "model_type": model.__class__.__name__,
+        "model_file": str(MODEL_FILE),
+        "feature_names_file": str(FEATURE_NAMES_FILE),
+        "target_column": TARGET_COLUMN,
+        "feature_count": len(feature_names),
+        "features": feature_names,
+        "trained_at": datetime.utcnow().isoformat(),
+        "params": params.get("model", {}).get("random_forest", {}),
+    }
 
-        logger.info("Generating feature importance plot...")
+    with open(MODEL_METADATA_FILE, "w", encoding="utf-8") as file:
+        json.dump(metadata, file, indent=4)
 
-        importance = pd.Series(
-            model.feature_importances_,
-            index=X_train.columns,
-        )
-
-        importance = importance.sort_values()
-
-        plt.figure(figsize=(10, 6))
-
-        importance.plot(kind="barh")
-
-        plt.xlabel("Importance")
-
-        plt.ylabel("Features")
-
-        plt.title("Random Forest Feature Importance")
-
-        plt.tight_layout()
-
-        plt.savefig(FEATURE_IMPORTANCE_FILE)
-
-        plt.close()
-
-        logger.info(
-            "Feature importance saved -> %s",
-            FEATURE_IMPORTANCE_FILE,
-        )
-
-    def log_mlflow(self, model, X_train):
-        """
-        Log model and parameters to MLflow.
-        """
-
-        logger.info("Logging model to MLflow...")
-
-        mlflow.log_params(
-            {
-                "algorithm": "RandomForestClassifier",
-                "n_estimators": N_ESTIMATORS,
-                "max_depth": MAX_DEPTH,
-                "min_samples_split": MIN_SAMPLES_SPLIT,
-                "min_samples_leaf": MIN_SAMPLES_LEAF,
-                "random_state": RANDOM_STATE,
-            }
-        )
-
-        signature = infer_signature(
-            X_train,
-            model.predict(X_train),
-        )
-
-        try:
-
-            mlflow.sklearn.log_model(
-                sk_model=model,
-                artifact_path="model",
-                signature=signature,
-                input_example=X_train.head(5),
-                registered_model_name=MLFLOW_MODEL_NAME,
-            )
-
-        except Exception as e:
-
-            logger.warning(
-                "Model Registry unavailable (%s). Logging model without registration.",
-                e,
-            )
-
-            mlflow.sklearn.log_model(
-                sk_model=model,
-                artifact_path="model",
-                signature=signature,
-                input_example=X_train.head(5),
-            )
-
-        mlflow.log_artifact(FEATURE_IMPORTANCE_FILE)
-
-        logger.info("MLflow logging completed.")
+    logger.info("Model saved to %s", MODEL_FILE)
+    logger.info("Model metadata saved to %s", MODEL_METADATA_FILE)
+    logger.info("Feature names saved to %s", FEATURE_NAMES_FILE)
 
 
 def train_model():
-    """
-    Entry point used by pipeline.py
-    """
+    logger.info("=" * 80)
+    logger.info("MODEL TRAINING STARTED")
+    logger.info("=" * 80)
 
-    trainer = ModelTrainer()
+    params = load_params()
+    df = load_training_data()
 
-    return trainer.train()
+    X_train = df.drop(columns=[TARGET_COLUMN])
+    y_train = df[TARGET_COLUMN]
+
+    feature_names = list(X_train.columns)
+
+    logger.info("Training data shape: %s", df.shape)
+    logger.info("Feature count: %d", len(feature_names))
+    logger.info("Target column: %s", TARGET_COLUMN)
+
+    mlflow_params = params.get("training", {})
+    experiment_name = mlflow_params.get("experiment_name", "wine-quality")
+
+    mlflow_tracking_uri = params.get("mlflow", {}).get("tracking_uri", "mlruns")
+    mlflow.set_tracking_uri(str(PROJECT_ROOT / mlflow_tracking_uri))
+    mlflow.set_experiment(experiment_name)
+
+    model = build_model(params)
+
+    with mlflow.start_run(run_name="random_forest_training"):
+        rf_params = params.get("model", {}).get("random_forest", {})
+
+        mlflow.log_params(rf_params)
+        mlflow.log_param("target_column", TARGET_COLUMN)
+        mlflow.log_param("training_rows", X_train.shape[0])
+        mlflow.log_param("feature_count", X_train.shape[1])
+
+        logger.info("Training RandomForestRegressor")
+        model.fit(X_train, y_train)
+
+        train_score = model.score(X_train, y_train)
+
+        logger.info("Training R2 score: %.6f", train_score)
+
+        mlflow.log_metric("train_r2_score", train_score)
+
+        save_training_artifacts(
+            model=model,
+            feature_names=feature_names,
+            params=params,
+        )
+
+        mlflow.sklearn.log_model(
+            sk_model=model,
+            artifact_path="model",
+        )
+
+        mlflow.log_artifact(str(MODEL_METADATA_FILE))
+        mlflow.log_artifact(str(FEATURE_NAMES_FILE))
+
+    logger.info("=" * 80)
+    logger.info("MODEL TRAINING COMPLETED")
+    logger.info("=" * 80)
+
+    return model
 
 
 if __name__ == "__main__":
-
     train_model()

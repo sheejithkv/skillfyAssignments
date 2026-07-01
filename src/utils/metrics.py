@@ -28,8 +28,9 @@ from sklearn.metrics import (
     confusion_matrix,
     classification_report,
 )
+from src.utils.logger import get_logger
 
-from src.utils.logger import logger
+logger = get_logger(__name__)
 from src.utils.exceptions import MLOpsException
 from src.utils.common import create_directory
 
