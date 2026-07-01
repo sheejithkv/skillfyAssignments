@@ -13,6 +13,12 @@ import pandas as pd
 import yaml
 from sklearn.ensemble import RandomForestRegressor
 
+from src.utils.model_registry import (
+    register_model,
+    wait_until_model_ready,
+    set_model_alias,
+)
+
 from src.config import (
     PROJECT_ROOT,
     TRAIN_DATA,
@@ -146,11 +152,40 @@ def train_model():
             params=params,
         )
 
+
         mlflow.sklearn.log_model(
             sk_model=model,
             artifact_path="model",
         )
-
+        
+        run_id = mlflow.active_run().info.run_id
+        
+        model_name = params.get(
+            "training",
+            {},
+        ).get(
+            "registered_model_name",
+            "wine-quality-model",
+        )
+        
+        model_version = register_model(
+            run_id=run_id,
+            model_name=model_name,
+            artifact_path="model",
+        )
+        
+        wait_until_model_ready(
+            model_name=model_name,
+            version=model_version,
+        )
+        
+       
+        set_model_alias(
+            model_name=model_name,
+            version=model_version,
+            alias="champion",
+        )
+        
         mlflow.log_artifact(str(MODEL_METADATA_FILE))
         mlflow.log_artifact(str(FEATURE_NAMES_FILE))
 

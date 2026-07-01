@@ -22,6 +22,15 @@ model:
     min_samples_leaf: 1
     random_state: 42
 
+optuna:
+  n_trials: 20
+  direction: maximize
+  validation_size: 0.2
+
+training:
+  experiment_name: wine-quality
+  registered_model_name: wine-quality-model    
+
 training:
   experiment_name: wine-quality
   registered_model_name: wine-quality-model
