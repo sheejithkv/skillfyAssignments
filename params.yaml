@@ -1,0 +1,13 @@
+dataset:
+  path: data/raw/winequality-red.csv
+
+model:
+  random_state: 42
+  test_size: 0.2
+
+training:
+  experiment_name: wine-quality
+  registered_model_name: wine-quality-model
+
+optuna:
+  n_trials: 20

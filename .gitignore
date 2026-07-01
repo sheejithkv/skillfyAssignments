@@ -5,13 +5,18 @@ __pycache__/
 venv/
 .env
 
-mlruns/
-
-models/*.pkl
-
-logs/
-
 .idea/
 .vscode/
 
-*.ipynb_checkpoints
+logs/*
+!logs/.gitkeep
+
+artifacts/*
+!artifacts/.gitkeep
+
+mlruns/*
+!mlruns/.gitkeep
+
+models/*.pkl
+
+.ipynb_checkpoints
