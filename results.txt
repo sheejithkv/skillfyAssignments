@@ -15,3 +15,29 @@ curl -X POST http://localhost:8000/predict \
   }'
 
 curl http://localhost:8000/metrics | grep wine_quality_predictions_total
+
+
+sheejith@WS-16972:~/skillfyAssignments/mlops-end2end$ python3 -m pytest tests -v
+============================================================================================== test session starts ==============================================================================================
+platform linux -- Python 3.10.12, pytest-8.4.1, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/sheejith/skillfyAssignments/mlops-end2end
+plugins: hydra-core-1.3.3, langsmith-0.3.37, anyio-4.8.0
+collected 16 items
+
+tests/test_api.py::test_health_endpoint PASSED                                                                                                                                                            [  6%]
+tests/test_api.py::test_model_info_endpoint PASSED                                                                                                                                                        [ 12%]
+tests/test_api.py::test_prediction_endpoint PASSED                                                                                                                                                        [ 18%]
+tests/test_api.py::test_metrics_endpoint PASSED                                                                                                                                                           [ 25%]
+tests/test_api.py::test_invalid_request_returns_422 PASSED                                                                                                                                                [ 31%]
+tests/test_api.py::test_invalid_data_type_returns_422 PASSED                                                                                                                                              [ 37%]
+tests/test_evaluation.py::test_evaluation_returns_metrics PASSED                                                                                                                                          [ 43%]
+tests/test_evaluation.py::test_metrics_file_created PASSED                                                                                                                                                [ 50%]
+tests/test_evaluation.py::test_metrics_file_contains_expected_keys PASSED                                                                                                                                 [ 56%]
+tests/test_evaluation.py::test_metric_values_are_numeric PASSED                                                                                                                                           [ 62%]
+tests/test_preprocessing.py::test_preprocess_creates_train_and_test_files PASSED                                                                                                                          [ 68%]
+tests/test_preprocessing.py::test_train_test_have_same_columns PASSED                                                                                                                                     [ 75%]
+tests/test_preprocessing.py::test_target_column_exists_after_preprocessing PASSED                                                                                                                         [ 81%]
+tests/test_preprocessing.py::test_no_missing_values_after_preprocessing PASSED                                                                                                                            [ 87%]
+tests/test_training.py::test_train_model_creates_model_file PASSED                                                                                                                                        [ 93%]
+tests/test_training.py::test_trained_model_has_predict_method PASSED                                                                                                                                      [100%]
