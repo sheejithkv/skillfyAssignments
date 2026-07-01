@@ -14,7 +14,6 @@ split:
 
 model:
   algorithm: RandomForestRegressor
-
   random_forest:
     n_estimators: 200
     max_depth: 15
@@ -29,18 +28,10 @@ optuna:
 
 training:
   experiment_name: wine-quality
-  registered_model_name: wine-quality-model    
-
-training:
-  experiment_name: wine-quality
   registered_model_name: wine-quality-model
 
 mlflow:
   tracking_uri: mlruns
-
-optuna:
-  n_trials: 20
-  direction: maximize
 
 evaluation:
   metrics:
