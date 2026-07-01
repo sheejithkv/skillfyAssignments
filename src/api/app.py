@@ -2,7 +2,10 @@
 FastAPI application for Wine Quality prediction service.
 """
 
-from fastapi import FastAPI, HTTPException
+import time
+
+from fastapi import FastAPI, HTTPException, Request, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from src.api.schemas import (
     WineQualityInput,
@@ -11,6 +14,12 @@ from src.api.schemas import (
     ModelInfoResponse,
 )
 from src.api.predict import prediction_service
+from src.api.metrics import (
+    REQUEST_COUNT,
+    REQUEST_LATENCY,
+    PREDICTION_COUNT,
+    PREDICTION_FAILURE_COUNT,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -20,6 +29,28 @@ app = FastAPI(
     description="FastAPI inference service for the MLOps Wine Quality project.",
     version="1.0.0",
 )
+
+
+@app.middleware("http")
+async def prometheus_middleware(request: Request, call_next):
+    start_time = time.time()
+
+    response = await call_next(request)
+
+    latency = time.time() - start_time
+
+    REQUEST_COUNT.labels(
+        method=request.method,
+        endpoint=request.url.path,
+        http_status=response.status_code,
+    ).inc()
+
+    REQUEST_LATENCY.labels(
+        method=request.method,
+        endpoint=request.url.path,
+    ).observe(latency)
+
+    return response
 
 
 @app.get(
@@ -58,6 +89,8 @@ def predict(payload: WineQualityInput):
 
         prediction = prediction_service.predict(input_data)
 
+        PREDICTION_COUNT.inc()
+
         return {
             "prediction": prediction,
             "rounded_prediction": int(round(prediction)),
@@ -69,8 +102,18 @@ def predict(payload: WineQualityInput):
         }
 
     except Exception as exc:
+        PREDICTION_FAILURE_COUNT.inc()
+
         logger.exception("Prediction failed")
         raise HTTPException(
             status_code=500,
             detail=str(exc),
         ) from exc
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(
+        generate_latest(),
+        media_type=CONTENT_TYPE_LATEST,
+    )
