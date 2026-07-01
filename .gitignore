@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+
+venv/
+.env
+
+mlruns/
+
+models/*.pkl
+
+logs/
+
+.idea/
+.vscode/
+
+*.ipynb_checkpoints
